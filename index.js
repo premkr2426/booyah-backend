@@ -28,13 +28,23 @@ const userSchema = new mongoose.Schema({
 }, { strict: false });
 const User = mongoose.models.User || mongoose.model('User', userSchema);
 
-
 // ===================================================================
-// 🚀 RAASTA 1: QR GENERATE KARNE WALA
+// 🚀 RAASTA 1: QR GENERATE KARNE WALA (FIXED 100%)
 // ===================================================================
 app.post('/api/pay', async (req, res) => {
     try {
-        const { amount, ffUid } = req.body;
+        // 1. Frontend se aane wali SAARI details ko pakdo
+        const { 
+            amount, 
+            ffUid, 
+            customer_name, 
+            customer_email, 
+            customer_mobile, 
+            client_txn_id, 
+            p_info 
+        } = req.body;
+
+        // 2. TranzUPI ko saari required details bhejo
         const tranzUpiResponse = await fetch('https://tranzupi.com/api/create-order', {
             method: 'POST',
             headers: {
@@ -43,13 +53,22 @@ app.post('/api/pay', async (req, res) => {
             },
             body: JSON.stringify({
                 amount: amount,
-                client_txn_id: `BOOYAH_${ffUid}_${Date.now()}`, 
-                customer_name: "Booyah Player"
+                client_txn_id: client_txn_id || `BOOYAH_${ffUid}_${Date.now()}`, 
+                customer_name: customer_name || "Booyah Player",
+                customer_email: customer_email || "player@booyahcentral.com",
+                customer_mobile: customer_mobile || "9999999999",
+                p_info: p_info || "Booyah Wallet Topup"
             })
         });
+
         const qrData = await tranzUpiResponse.json(); 
+        
+        // 3. Render ke logs mein asli response print karo (Taaki error ho toh dikh jaye)
+        console.log("TranzUPI Live Response:", qrData);
+        
         res.json(qrData); 
     } catch (error) {
+        console.error("Backend API Error:", error);
         res.status(500).json({ error: 'QR nahi ban paya: ' + error.message });
     }
 });
