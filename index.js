@@ -29,42 +29,41 @@ const userSchema = new mongoose.Schema({
 const User = mongoose.models.User || mongoose.model('User', userSchema);
 
 // ===================================================================
-// 🚀 RAASTA 1: QR GENERATE KARNE WALA (FIXED 100%)
+// 🚀 RAASTA 1: QR GENERATE KARNE WALA (THE ULTIMATE FIX)
 // ===================================================================
 app.post('/api/pay', async (req, res) => {
     try {
-        // 1. Frontend se aane wali SAARI details ko pakdo
         const { 
-            amount, 
-            ffUid, 
-            customer_name, 
-            customer_email, 
-            customer_mobile, 
-            client_txn_id, 
-            p_info 
+            amount, ffUid, customer_name, customer_email, 
+            customer_mobile, client_txn_id, p_info 
         } = req.body;
 
-        // 2. TranzUPI ko saari required details bhejo
+        // TranzUPI ko har ek sambhav (possible) detail bhej rahe hain!
+        const payload = {
+            key: process.env.TRANZUPI_API_KEY, // Kuch gateway key ko body mein maangte hain
+            client_txn_id: client_txn_id || `BOOYAH_${ffUid}_${Date.now()}`, 
+            amount: amount.toString(), // 👈 Amount hamesha text (string) mein hona chahiye
+            p_info: p_info || "Booyah Wallet Topup",
+            customer_name: customer_name || "Booyah Player",
+            customer_email: customer_email || "player@booyahcentral.com",
+            customer_mobile: customer_mobile || "9999999999",
+            redirect_url: "https://booyah-central.vercel.app/", // 👈 YEH SABSE ZAROORI HAI
+            udf1: "user",
+            udf2: "ff",
+            udf3: "booyah"
+        };
+
         const tranzUpiResponse = await fetch('https://tranzupi.com/api/create-order', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${process.env.TRANZUPI_API_KEY}`
             },
-            body: JSON.stringify({
-                amount: amount,
-                client_txn_id: client_txn_id || `BOOYAH_${ffUid}_${Date.now()}`, 
-                customer_name: customer_name || "Booyah Player",
-                customer_email: customer_email || "player@booyahcentral.com",
-                customer_mobile: customer_mobile || "9999999999",
-                p_info: p_info || "Booyah Wallet Topup"
-            })
+            body: JSON.stringify(payload)
         });
 
         const qrData = await tranzUpiResponse.json(); 
-        
-        // 3. Render ke logs mein asli response print karo (Taaki error ho toh dikh jaye)
-        console.log("TranzUPI Live Response:", qrData);
+        console.log("TranzUPI Live Response:", qrData); // Secret Tracker 🕵️‍♂️
         
         res.json(qrData); 
     } catch (error) {
