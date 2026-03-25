@@ -19,35 +19,37 @@ mongoose.connect(process.env.MONGO_URI, {
 .catch((err) => console.log('Tijori ka lock nahi khula ❌ Error: ', err.message));
 
 // ===================================================================
-// 🚨 BRAHMASTRA FIX: User Model yahin define kar diya!
-// Ab us bahar wali 'user.js' file ka koi kalesh nahi bacha.
+// 🚨 USER MODEL
 // ===================================================================
 const userSchema = new mongoose.Schema({
     ffUid: { type: String, required: true },
-    coins: { type: Number, default: 0 }
+    coins: { type: Number, default: 0 } 
 }, { strict: false });
 const User = mongoose.models.User || mongoose.model('User', userSchema);
 
 // ===================================================================
-// 🚀 RAASTA 1: QR GENERATE KARNE WALA (THE ULTIMATE FIX)
+// 🚀 RAASTA 1: THE SECURE QR GENERATOR (API KEY SAFE)
 // ===================================================================
 app.post('/api/pay', async (req, res) => {
     try {
-        const { 
-            amount, ffUid, customer_name, customer_email, 
-            customer_mobile, client_txn_id, p_info 
-        } = req.body;
+        const { amount, ffUid, customer_name, customer_email, customer_mobile } = req.body;
 
-        // TranzUPI ko har ek sambhav (possible) detail bhej rahe hain!
+        // 🛑 CODE KHUD CHECK KAREGA KI VERCEL MEIN CHABI HAI YA NAHI
+        const API_KEY = process.env.TRANZUPI_API_KEY;
+        if (!API_KEY) {
+            console.error("🚨 VERCEL MEIN TRANZUPI_API_KEY MISSING HAI!");
+            return res.status(500).json({ error: 'Gateway Key Missing in Server!' });
+        }
+
         const payload = {
-            key: process.env.TRANZUPI_API_KEY, // Kuch gateway key ko body mein maangte hain
-            client_txn_id: client_txn_id || `BOOYAH_${ffUid}_${Date.now()}`, 
-            amount: amount.toString(), // 👈 Amount hamesha text (string) mein hona chahiye
-            p_info: p_info || "Booyah Wallet Topup",
+            key: API_KEY, // Yahan code apne aap chabi laga dega!
+            client_txn_id: `BOOYAH_${ffUid}_${Date.now()}`, 
+            amount: amount.toString(),
+            p_info: "Booyah Wallet Topup",
             customer_name: customer_name || "Booyah Player",
             customer_email: customer_email || "player@booyahcentral.com",
             customer_mobile: customer_mobile || "9999999999",
-            redirect_url: "https://booyah-central.vercel.app/", // 👈 YEH SABSE ZAROORI HAI
+            redirect_url: "https://booyah-central.vercel.app/", 
             udf1: "user",
             udf2: "ff",
             udf3: "booyah"
@@ -55,20 +57,27 @@ app.post('/api/pay', async (req, res) => {
 
         const tranzUpiResponse = await fetch('https://tranzupi.com/api/create-order', {
             method: 'POST',
-            headers: {
+            headers: { 
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${process.env.TRANZUPI_API_KEY}`
+                'Authorization': `Bearer ${API_KEY}`
             },
             body: JSON.stringify(payload)
         });
 
-        const qrData = await tranzUpiResponse.json(); 
-        console.log("TranzUPI Live Response:", qrData); // Secret Tracker 🕵️‍♂️
+        const textResponse = await tranzUpiResponse.text(); 
         
-        res.json(qrData); 
+        try {
+            const qrData = JSON.parse(textResponse);
+            console.log("TranzUPI API Response:", qrData);
+            res.json(qrData); 
+        } catch (parseError) {
+            console.error("Gateway ne JSON nahi bheja, Error bheja hai:", textResponse);
+            res.status(500).json({ error: 'Gateway error: ' + textResponse.substring(0, 50) });
+        }
+
     } catch (error) {
         console.error("Backend API Error:", error);
-        res.status(500).json({ error: 'QR nahi ban paya: ' + error.message });
+        res.status(500).json({ error: 'System Error: ' + error.message });
     }
 });
 
@@ -179,7 +188,6 @@ app.post('/api/webhook/tranzupi', async (req, res) => {
                 let user = await User.findOne({ ffUid: playerUid });
                 if (!user) user = new User({ ffUid: playerUid, coins: 0 });
                 
-                // 🚨 SINGLE COIN FIX: Saare paise direct 'coins' mein jayenge! (Koi PlayCoins nahi)
                 user.coins += Number(amount);
                 await user.save();
                 
@@ -204,7 +212,7 @@ app.post('/api/admin/gift', async (req, res) => {
         if (!user) {
             user = new User({ ffUid: ffUid, coins: amountToAdd });
         } else {
-            user.coins += amountToAdd; // Main balance update
+            user.coins += amountToAdd; 
         }
         await user.save();
 
