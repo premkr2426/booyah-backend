@@ -28,11 +28,11 @@ const userSchema = new mongoose.Schema({
 const User = mongoose.models.User || mongoose.model('User', userSchema);
 
 // ===================================================================
-// 🚀 RAASTA 1: THE BULLETPROOF QR GENERATOR (FIX 2.0)
+// 🚀 RAASTA 1: THE BULLETPROOF QR GENERATOR (API DOCS MATCHED)
 // ===================================================================
 app.post('/api/pay', async (req, res) => {
     try {
-        const { amount, ffUid, customer_name, customer_email, customer_mobile } = req.body;
+        const { amount, ffUid, customer_mobile } = req.body;
 
         const API_KEY = process.env.TRANZUPI_API_KEY;
         if (!API_KEY) {
@@ -40,30 +40,25 @@ app.post('/api/pay', async (req, res) => {
             return res.status(500).json({ error: 'Gateway Key Missing in Server!' });
         }
 
-        // 🚨 Ninja Hack: TranzUPI jaise gateways ko JSON nahi, URLSearchParams samajh aata hai
-        const params = new URLSearchParams();
-        params.append('key', API_KEY); 
-        params.append('api_key', API_KEY); // Backup name taaki error na aaye
-        params.append('client_txn_id', `BOOYAH_${ffUid || 'USER'}_${Date.now()}`);
-        params.append('amount', amount ? amount.toString() : "10"); // Fail-safe amount
-        params.append('p_info', "Booyah Wallet Topup");
-        params.append('customer_name', customer_name || "Booyah Player");
-        params.append('customer_email', customer_email || "player@booyahcentral.com");
-        params.append('customer_mobile', customer_mobile || "9999999999");
-        params.append('redirect_url', "https://booyah-central.vercel.app/");
-        params.append('udf1', "user");
-        params.append('udf2', "ff");
-        params.append('udf3', "booyah");
+        // 🚨 CHOR PAKDA GAYA: TranzUPI ke official names use kar rahe hain
+        const payload = {
+            "customer_mobile": customer_mobile || "9999999999",
+            "user_token": API_KEY, // Yahan key ki jagah user_token chahiye tha!
+            "amount": amount ? amount.toString() : "10",
+            "order_id": `BYH_${ffUid || 'USR'}_${Date.now()}`, // Yahan order_id chahiye tha!
+            "redirect_url": "https://booyah-central.vercel.app/",
+            "remark1": "Booyah Wallet Topup",
+            "remark2": ffUid || "player"
+        };
 
-        console.log("📤 Sending Payload to TranzUPI:", params.toString()); // Ab logs mein saaf dikhega
+        console.log("📤 Sending Payload to TranzUPI:", payload);
 
         const tranzUpiResponse = await fetch('https://tranzupi.com/api/create-order', {
             method: 'POST',
             headers: { 
-                // TranzUPI ko unki bhasha mein data bhej rahe hain
-                'Content-Type': 'application/x-www-form-urlencoded'
+                'Content-Type': 'application/json' // Wapas JSON par aa gaye
             },
-            body: params.toString()
+            body: JSON.stringify(payload)
         });
 
         const textResponse = await tranzUpiResponse.text(); 
@@ -72,7 +67,6 @@ app.post('/api/pay', async (req, res) => {
             const qrData = JSON.parse(textResponse);
             console.log("📥 TranzUPI Final Response:", qrData);
             
-            // Agar fir bhi error aaya, toh aapki app pe direct dikhega
             if (qrData.status === false) {
                  return res.status(400).json({ error: 'Gateway Rejected: ' + qrData.message });
             }
