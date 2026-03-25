@@ -28,7 +28,7 @@ const userSchema = new mongoose.Schema({
 const User = mongoose.models.User || mongoose.model('User', userSchema);
 
 // ===================================================================
-// 🚀 RAASTA 1: THE BULLETPROOF QR GENERATOR (API DOCS MATCHED)
+// 🚀 RAASTA 1: THE CARPET BOMBING QR GENERATOR (100% COVERAGE)
 // ===================================================================
 app.post('/api/pay', async (req, res) => {
     try {
@@ -36,36 +36,55 @@ app.post('/api/pay', async (req, res) => {
 
         const API_KEY = process.env.TRANZUPI_API_KEY;
         if (!API_KEY) {
-            console.error("🚨 VERCEL/RENDER MEIN TRANZUPI_API_KEY MISSING HAI!");
             return res.status(500).json({ error: 'Gateway Key Missing in Server!' });
         }
 
-        // 🚨 CHOR PAKDA GAYA: TranzUPI ke official names use kar rahe hain
-        const payload = {
-            "customer_mobile": customer_mobile || "9999999999",
-            "user_token": API_KEY, // Yahan key ki jagah user_token chahiye tha!
-            "amount": amount ? amount.toString() : "10",
-            "order_id": `BYH_${ffUid || 'USR'}_${Date.now()}`, // Yahan order_id chahiye tha!
-            "redirect_url": "https://booyah-central.vercel.app/",
-            "remark1": "Booyah Wallet Topup",
-            "remark2": ffUid || "player"
-        };
+        // 💣 CARPET BOMBING: Har possible format aur naam ek saath bhej rahe hain
+        const txnId = `BYH_${ffUid || 'USR'}_${Date.now()}`;
+        const amt = amount ? amount.toString() : "10";
+        
+        const params = new URLSearchParams();
+        
+        // --- CHABI (Keys) ---
+        params.append('user_token', API_KEY);
+        params.append('key', API_KEY);
+        params.append('api_key', API_KEY);
+        
+        // --- TRANSACTION IDs ---
+        params.append('order_id', txnId);
+        params.append('client_txn_id', txnId);
+        params.append('txnid', txnId);
+        
+        // --- AMOUNT ---
+        params.append('amount', amt);
+        
+        // --- MOBILE ---
+        params.append('customer_mobile', customer_mobile || "9999999999");
+        params.append('mobile', customer_mobile || "9999999999");
+        
+        // --- OTHERS ---
+        params.append('redirect_url', "https://booyah-central.vercel.app/");
+        params.append('remark1', "Booyah Wallet Topup");
+        params.append('remark2', ffUid || "player");
+        params.append('p_info', "Topup");
+        params.append('udf1', "user");
 
-        console.log("📤 Sending Payload to TranzUPI:", payload);
+        console.log("💣 Carpet Bombing Payload (Form-Data):", params.toString());
 
         const tranzUpiResponse = await fetch('https://tranzupi.com/api/create-order', {
             method: 'POST',
             headers: { 
-                'Content-Type': 'application/json' // Wapas JSON par aa gaye
+                // TranzUPI ka asli purana format
+                'Content-Type': 'application/x-www-form-urlencoded' 
             },
-            body: JSON.stringify(payload)
+            body: params.toString()
         });
 
         const textResponse = await tranzUpiResponse.text(); 
         
         try {
             const qrData = JSON.parse(textResponse);
-            console.log("📥 TranzUPI Final Response:", qrData);
+            console.log("📥 Final Gateway Response:", qrData);
             
             if (qrData.status === false) {
                  return res.status(400).json({ error: 'Gateway Rejected: ' + qrData.message });
@@ -73,7 +92,7 @@ app.post('/api/pay', async (req, res) => {
 
             res.json(qrData); 
         } catch (parseError) {
-            console.error("Gateway ne JSON nahi bheja:", textResponse);
+            console.error("Gateway Error Text:", textResponse);
             res.status(500).json({ error: 'Gateway error: ' + textResponse.substring(0, 50) });
         }
 
