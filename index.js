@@ -38,7 +38,8 @@ app.get('/api/ping', (req, res) => res.send('pong'));
 // ===================================================================
 const userSchema = new mongoose.Schema({
     ffUid: { type: String, required: true },
-    coins: { type: Number, default: 0 } 
+    coins: { type: Number, default: 0 },
+    processedOrders: { type: [String], default: [] } // Added for Plan C
 }, { strict: false });
 const User = mongoose.models.User || mongoose.model('User', userSchema);
 
@@ -296,24 +297,29 @@ app.get('/api/check-payment/:orderId', async (req, res) => {
 
         console.log(`🕵️ Status check kar rahe hain Order: ${orderId} ka...`);
 
+        // 🔥 THE FIX: JSON ki jagah Form-Data (Carpet Bombing) use kar rahe hain
+        const params = new URLSearchParams();
+        params.append('user_token', API_KEY);
+        params.append('api_key', API_KEY); // Extra safety
+        params.append('order_id', orderId);
+        params.append('client_txn_id', orderId); // Extra safety
+
         // TranzUPI ka collar pakad kar status pooch rahe hain
         const tranzUpiResponse = await fetch('https://tranzupi.com/api/check-order-status', {
             method: 'POST',
             headers: {
-                'Content-Type': 'application/json'
+                // Gateway ka pasandida format
+                'Content-Type': 'application/x-www-form-urlencoded'
             },
-            body: JSON.stringify({
-                "user_token": API_KEY,
-                "order_id": orderId
-            })
+            body: params.toString()
         });
 
         const data = await tranzUpiResponse.json();
         console.log("📥 TranzUPI Status Response:", data);
 
         // Agar TranzUPI bole ki payment SUCCESS hai
-        if (data.status === 'SUCCESS' && data.result && data.result.status === 'SUCCESS') {
-            const amount = data.result.amount;
+        if (data.status === 'SUCCESS' || (data.result && data.result.status === 'SUCCESS')) {
+            const amount = data.result ? data.result.amount : 10;
             
             // Order ID se UID nikalte hain (format: BYH_UID_TIME)
             const parts = orderId.split('_');
