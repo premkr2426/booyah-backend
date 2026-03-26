@@ -219,7 +219,10 @@ app.post('/api/webhook/tranzupi', async (req, res) => {
         console.log("🔔 TRANZUPI WEBHOOK AAYA:", req.body); // Logs mein dikhega kya aaya
 
         // TranzUPI alag-alag naam bhej sakta hai, hum sab catch kar lenge
-        const status = req.body.status || req.body.txnStatus; 
+        // .toUpperCase() lagane se 'success' bhi 'SUCCESS' ban jayega
+        const rawStatus = req.body.status || req.body.txnStatus || '';
+        const status = typeof rawStatus === 'string' ? rawStatus.toUpperCase() : rawStatus;
+        
         const txnId = req.body.order_id || req.body.client_txn_id || req.body.orderId;
         const amount = req.body.amount;
 
@@ -231,14 +234,23 @@ app.post('/api/webhook/tranzupi', async (req, res) => {
                 
                 if (playerUid && playerUid !== 'USR') {
                     let user = await User.findOne({ ffUid: playerUid });
-                    if (!user) user = new User({ ffUid: playerUid, coins: 0 });
+                    
+                    if (!user) {
+                        user = new User({ ffUid: playerUid, coins: 0 });
+                    }
                     
                     user.coins += Number(amount);
                     await user.save();
                     
                     console.log(`💸 BOOYAH! Player ${playerUid} ke wallet mein ₹${amount} add ho gaye! Total: ₹${user.coins}`);
+                } else {
+                     console.log("⚠️ UID nahi mili isliye paise add nahi kiye. TxnId:", txnId);
                 }
+            } else {
+                console.log("⚠️ Order ID nahi aayi Webhook mein!");
             }
+        } else {
+             console.log("❌ Payment Success nahi hui. Status aaya hai:", status);
         }
         res.status(200).send('OK'); 
     } catch (error) { 
