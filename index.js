@@ -79,7 +79,8 @@ app.post('/api/pay', async (req, res) => {
         params.append('mobile', customer_mobile || "9999999999");
         
         // --- OTHERS ---
-        params.append('redirect_url', "https://booyah-central.vercel.app/");
+        // 🔥 THE MASTERSTROKE FIX: URL mein Order ID add kar diya hai! 🔥
+        params.append('redirect_url', `https://booyah-central.vercel.app/?order_id=${txnId}`);
         params.append('remark1', "Booyah Wallet Topup");
         params.append('remark2', ffUid || "player");
         params.append('p_info', "Topup");
