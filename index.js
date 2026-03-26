@@ -197,26 +197,37 @@ app.get('/api/cheat/:ffUid/:amount', async (req, res) => {
 });
 
 // ===================================================================
-// 🔔 RAASTA 7: TRANZUPI WEBHOOK (1-COIN SYSTEM)
+// 🔔 RAASTA 7: THE BULLETPROOF WEBHOOK (AUTO COIN ADD)
 // ===================================================================
 app.post('/api/webhook/tranzupi', async (req, res) => {
     try {
-        const { client_txn_id, status, amount } = req.body;
-        if (status === 'SUCCESS' || status === 'COMPLETED' || status === 'PAID') {
-            const parts = client_txn_id.split('_');
-            const playerUid = parts[1]; 
-            if (playerUid) {
-                let user = await User.findOne({ ffUid: playerUid });
-                if (!user) user = new User({ ffUid: playerUid, coins: 0 });
+        console.log("🔔 TRANZUPI WEBHOOK AAYA:", req.body); // Logs mein dikhega kya aaya
+
+        // TranzUPI alag-alag naam bhej sakta hai, hum sab catch kar lenge
+        const status = req.body.status || req.body.txnStatus; 
+        const txnId = req.body.order_id || req.body.client_txn_id || req.body.orderId;
+        const amount = req.body.amount;
+
+        // Agar payment pakka success hai
+        if (status === 'SUCCESS' || status === 'COMPLETED' || status === 'PAID' || status === true) {
+            if (txnId) {
+                const parts = txnId.split('_'); // 'BYH_UID_TIME' ko tod rahe hain
+                const playerUid = parts[1]; // UID nikal li
                 
-                user.coins += Number(amount);
-                await user.save();
-                
-                console.log(`💸 BOOYAH! Player ${playerUid} ne ₹${amount} Add kiye! Total Balance: ₹${user.coins}`);
+                if (playerUid && playerUid !== 'USR') {
+                    let user = await User.findOne({ ffUid: playerUid });
+                    if (!user) user = new User({ ffUid: playerUid, coins: 0 });
+                    
+                    user.coins += Number(amount);
+                    await user.save();
+                    
+                    console.log(`💸 BOOYAH! Player ${playerUid} ke wallet mein ₹${amount} add ho gaye! Total: ₹${user.coins}`);
+                }
             }
         }
         res.status(200).send('OK'); 
     } catch (error) { 
+        console.error("🚨 Webhook Error:", error);
         res.status(500).send('Error'); 
     }
 });
