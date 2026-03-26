@@ -11,12 +11,27 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// ===================================================================
+// 🕵️ GLOBAL LOGGER (Helps verify if TranzUPI webhook is reaching us)
+// ===================================================================
+app.use((req, res, next) => {
+    if (req.method === 'POST') {
+        console.log('Incoming POST Request to:', req.path);
+    }
+    next();
+});
+
 mongoose.connect(process.env.MONGO_URI, {
     serverSelectionTimeoutMS: 5000,
     family: 4  
 })
 .then(() => console.log('Tijori (Database) se connection SUCCESSFUL! 🔐✅ BOOYAH!'))
 .catch((err) => console.log('Tijori ka lock nahi khula ❌ Error: ', err.message));
+
+// ===================================================================
+// 🟢 PING ROUTE (To keep Render server awake)
+// ===================================================================
+app.get('/api/ping', (req, res) => res.send('pong'));
 
 // ===================================================================
 // 🚨 USER MODEL
