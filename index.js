@@ -216,21 +216,18 @@ app.get('/api/cheat/:ffUid/:amount', async (req, res) => {
 // ===================================================================
 app.post('/api/webhook/tranzupi', async (req, res) => {
     try {
-        console.log("🔔 TRANZUPI WEBHOOK AAYA:", req.body); // Logs mein dikhega kya aaya
+        console.log("🔔 TRANZUPI WEBHOOK AAYA:", req.body); 
 
-        // TranzUPI alag-alag naam bhej sakta hai, hum sab catch kar lenge
-        // .toUpperCase() lagane se 'success' bhi 'SUCCESS' ban jayega
         const rawStatus = req.body.status || req.body.txnStatus || '';
         const status = typeof rawStatus === 'string' ? rawStatus.toUpperCase() : rawStatus;
         
         const txnId = req.body.order_id || req.body.client_txn_id || req.body.orderId;
         const amount = req.body.amount;
 
-        // Agar payment pakka success hai
         if (status === 'SUCCESS' || status === 'COMPLETED' || status === 'PAID' || status === true) {
             if (txnId) {
-                const parts = txnId.split('_'); // 'BYH_UID_TIME' ko tod rahe hain
-                const playerUid = parts[1]; // UID nikal li
+                const parts = txnId.split('_'); 
+                const playerUid = parts[1]; 
                 
                 if (playerUid && playerUid !== 'USR') {
                     let user = await User.findOne({ ffUid: playerUid });
@@ -239,10 +236,17 @@ app.post('/api/webhook/tranzupi', async (req, res) => {
                         user = new User({ ffUid: playerUid, coins: 0 });
                     }
                     
-                    user.coins += Number(amount);
-                    await user.save();
-                    
-                    console.log(`💸 BOOYAH! Player ${playerUid} ke wallet mein ₹${amount} add ho gaye! Total: ₹${user.coins}`);
+                    // Double spend check for webhook too!
+                    const processed = user.processedOrders || [];
+                    if (!processed.includes(txnId)) {
+                        user.coins += Number(amount);
+                        processed.push(txnId);
+                        user.processedOrders = processed;
+                        await user.save();
+                        console.log(`💸 BOOYAH! Player ${playerUid} ke wallet mein ₹${amount} add ho gaye! Total: ₹${user.coins}`);
+                    } else {
+                        console.log(`⚠️ Webhook: Order ${txnId} ke paise pehle hi add ho chuke hain!`);
+                    }
                 } else {
                      console.log("⚠️ UID nahi mili isliye paise add nahi kiye. TxnId:", txnId);
                 }
@@ -279,6 +283,73 @@ app.post('/api/admin/gift', async (req, res) => {
         res.json({ message: 'Success', coins: user.coins });
     } catch (error) {
         res.status(500).json({ error: error.message });
+    }
+});
+
+// ===================================================================
+// 🕵️ RAASTA 10: COLLAR PAKAD STATUS CHECK (PLAN C - THE BRAHMASTRA)
+// ===================================================================
+app.get('/api/check-payment/:orderId', async (req, res) => {
+    try {
+        const orderId = req.params.orderId;
+        const API_KEY = process.env.TRANZUPI_API_KEY;
+
+        console.log(`🕵️ Status check kar rahe hain Order: ${orderId} ka...`);
+
+        // TranzUPI ka collar pakad kar status pooch rahe hain
+        const tranzUpiResponse = await fetch('https://tranzupi.com/api/check-order-status', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                "user_token": API_KEY,
+                "order_id": orderId
+            })
+        });
+
+        const data = await tranzUpiResponse.json();
+        console.log("📥 TranzUPI Status Response:", data);
+
+        // Agar TranzUPI bole ki payment SUCCESS hai
+        if (data.status === 'SUCCESS' && data.result && data.result.status === 'SUCCESS') {
+            const amount = data.result.amount;
+            
+            // Order ID se UID nikalte hain (format: BYH_UID_TIME)
+            const parts = orderId.split('_');
+            const playerUid = parts[1];
+
+            if (playerUid && playerUid !== 'USR') {
+                let user = await User.findOne({ ffUid: playerUid });
+                if (!user) {
+                    user = new User({ ffUid: playerUid, coins: 0 });
+                }
+
+                // 🛑 DOUBLE-SPEND PROTECTION (Ek order par ek hi baar paise)
+                const processed = user.processedOrders || [];
+                if (processed.includes(orderId)) {
+                    console.log(`⚠️ Order ${orderId} ke paise pehle hi mil chuke hain!`);
+                    return res.json({ success: true, message: 'Paise pehle hi add ho chuke hain!', coins: user.coins });
+                }
+
+                // ✅ Naya order hai, paise add karo!
+                user.coins += Number(amount);
+                processed.push(orderId); // Is order ko list mein daal do
+                user.processedOrders = processed; // Database update
+                
+                await user.save();
+                console.log(`💸 PLAN C BOOYAH! Player ${playerUid} ko ₹${amount} mil gaye! Total: ₹${user.coins}`);
+                
+                return res.json({ success: true, message: 'Payment verify ho gayi, paise add ho gaye!', coins: user.coins });
+            }
+        }
+
+        // Agar Pending hai, Failed hai, ya abhi tak UTR nahi dala
+        res.json({ success: false, message: 'Payment abhi success nahi hui hai', data: data });
+
+    } catch (error) {
+        console.error("🚨 Status Check Error:", error);
+        res.status(500).json({ error: 'Status check fail ho gaya' });
     }
 });
 
