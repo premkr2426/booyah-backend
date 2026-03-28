@@ -55,31 +55,24 @@ app.post('/api/pay', async (req, res) => {
             return res.status(500).json({ error: 'Gateway Key Missing in Server!' });
         }
 
-        // 💣 CARPET BOMBING: Har possible format aur naam ek saath bhej rahe hain
         const txnId = `BYH_${ffUid || 'USR'}_${Date.now()}`;
         const amt = amount ? amount.toString() : "10";
         
         const params = new URLSearchParams();
         
-        // --- CHABI (Keys) ---
         params.append('user_token', API_KEY);
         params.append('key', API_KEY);
         params.append('api_key', API_KEY);
         
-        // --- TRANSACTION IDs ---
         params.append('order_id', txnId);
         params.append('client_txn_id', txnId);
         params.append('txnid', txnId);
         
-        // --- AMOUNT ---
         params.append('amount', amt);
         
-        // --- MOBILE ---
         params.append('customer_mobile', customer_mobile || "9999999999");
         params.append('mobile', customer_mobile || "9999999999");
         
-        // --- OTHERS ---
-        // 🔥 THE MASTERSTROKE FIX: URL mein Order ID add kar diya hai! 🔥
         params.append('redirect_url', `https://booyah-central.vercel.app/?order_id=${txnId}`);
         params.append('remark1', "Booyah Wallet Topup");
         params.append('remark2', ffUid || "player");
@@ -91,7 +84,6 @@ app.post('/api/pay', async (req, res) => {
         const tranzUpiResponse = await fetch('https://tranzupi.com/api/create-order', {
             method: 'POST',
             headers: { 
-                // TranzUPI ka asli purana format
                 'Content-Type': 'application/x-www-form-urlencoded' 
             },
             body: params.toString()
@@ -298,18 +290,15 @@ app.get('/api/check-payment/:orderId', async (req, res) => {
 
         console.log(`🕵️ Status check kar rahe hain Order: ${orderId} ka...`);
 
-        // 🔥 THE FIX: JSON ki jagah Form-Data (Carpet Bombing) use kar rahe hain
         const params = new URLSearchParams();
         params.append('user_token', API_KEY);
-        params.append('api_key', API_KEY); // Extra safety
+        params.append('api_key', API_KEY);
         params.append('order_id', orderId);
-        params.append('client_txn_id', orderId); // Extra safety
+        params.append('client_txn_id', orderId); 
 
-        // TranzUPI ka collar pakad kar status pooch rahe hain
         const tranzUpiResponse = await fetch('https://tranzupi.com/api/check-order-status', {
             method: 'POST',
             headers: {
-                // Gateway ka pasandida format
                 'Content-Type': 'application/x-www-form-urlencoded'
             },
             body: params.toString()
@@ -318,11 +307,9 @@ app.get('/api/check-payment/:orderId', async (req, res) => {
         const data = await tranzUpiResponse.json();
         console.log("📥 TranzUPI Status Response:", data);
 
-        // Agar TranzUPI bole ki payment SUCCESS hai
         if (data.status === 'SUCCESS' || (data.result && data.result.status === 'SUCCESS')) {
             const amount = data.result ? data.result.amount : 10;
             
-            // Order ID se UID nikalte hain (format: BYH_UID_TIME)
             const parts = orderId.split('_');
             const playerUid = parts[1];
 
@@ -332,17 +319,15 @@ app.get('/api/check-payment/:orderId', async (req, res) => {
                     user = new User({ ffUid: playerUid, coins: 0 });
                 }
 
-                // 🛑 DOUBLE-SPEND PROTECTION (Ek order par ek hi baar paise)
                 const processed = user.processedOrders || [];
                 if (processed.includes(orderId)) {
                     console.log(`⚠️ Order ${orderId} ke paise pehle hi mil chuke hain!`);
                     return res.json({ success: true, message: 'Paise pehle hi add ho chuke hain!', coins: user.coins });
                 }
 
-                // ✅ Naya order hai, paise add karo!
                 user.coins += Number(amount);
-                processed.push(orderId); // Is order ko list mein daal do
-                user.processedOrders = processed; // Database update
+                processed.push(orderId); 
+                user.processedOrders = processed; 
                 
                 await user.save();
                 console.log(`💸 PLAN C BOOYAH! Player ${playerUid} ko ₹${amount} mil gaye! Total: ₹${user.coins}`);
@@ -351,12 +336,37 @@ app.get('/api/check-payment/:orderId', async (req, res) => {
             }
         }
 
-        // Agar Pending hai, Failed hai, ya abhi tak UTR nahi dala
         res.json({ success: false, message: 'Payment abhi success nahi hui hai', data: data });
 
     } catch (error) {
         console.error("🚨 Status Check Error:", error);
         res.status(500).json({ error: 'Status check fail ho gaya' });
+    }
+});
+
+// ===================================================================
+// ⚔️ RAASTA 11: TOURNAMENT FEE DEDUCTION (THE FIX!)
+// ===================================================================
+app.post('/api/user/deduct', async (req, res) => {
+    try {
+        const { ffUid, amount } = req.body;
+        if (!amount || amount <= 0) return res.json({ success: true }); // Free match hai toh kuch mat kaato
+        
+        let user = await User.findOne({ ffUid: ffUid });
+        if (!user) return res.status(404).json({ error: 'User DB mein nahi hai' });
+        
+        if (user.coins < amount) {
+            return res.status(400).json({ error: 'Kam Coins hain!' });
+        }
+
+        user.coins -= amount; // Paise kaat liye!
+        await user.save();
+        
+        console.log(`⚔️ BOOYAH! Player ${ffUid} ne tournament join kiya. ₹${amount} deduct hue. Bacha hua balance: ₹${user.coins}`);
+        res.json({ success: true, coins: user.coins });
+    } catch (error) {
+        console.error("Deduction Error:", error);
+        res.status(500).json({ error: 'Server error' });
     }
 });
 
