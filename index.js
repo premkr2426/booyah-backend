@@ -371,6 +371,47 @@ app.post('/api/user/deduct', async (req, res) => {
 });
 
 // ===================================================================
+// 👁️ RAASTA 12: TOURNAMENT PLAYERS DEKHNE KA ROUTE (ADMIN)
+// ===================================================================
+app.get('/api/tournaments/:id/players', async (req, res) => {
+    try {
+        const tourneyId = req.params.id;
+        
+        // Direct Database se collection nikalne ka master-trick
+        const db = mongoose.connection.db;
+
+        // Tournament dhoondho (Id string bhi ho sakti hai aur ObjectId bhi)
+        let query = { _id: tourneyId };
+        if (mongoose.isValidObjectId(tourneyId)) {
+            query = { _id: new mongoose.Types.ObjectId(tourneyId) };
+        }
+
+        // 'tournaments' naam ki collection mein data search kar rahe hain
+        const tournament = await db.collection('tournaments').findOne(query);
+
+        if (!tournament) {
+            return res.status(404).json({ error: 'Tournament nahi mila!' });
+        }
+
+        // DB mein aapne data 'participants', 'players', ya 'joinedUsers' jisme bhi save kiya ho
+        const playerList = tournament.participants || tournament.players || tournament.joinedUsers || [];
+
+        // Frontend ko kis design mein data chahiye, usme convert kar rahe hain
+        const formattedPlayers = playerList.map(player => ({
+            inGameName: player.inGameName || player.ffName || player.playerName || 'Unknown',
+            gameId: player.gameId || player.ffUid || player.uid || 'Unknown',
+            status: player.status || 'Joined'
+        }));
+
+        res.json({ players: formattedPlayers });
+
+    } catch (error) {
+        console.error("🚨 Error fetching players:", error);
+        res.status(500).json({ error: 'Server error: ' + error.message });
+    }
+});
+
+// ===================================================================
 // 🟢 SERVER START
 // ===================================================================
 app.listen(PORT, () => {
